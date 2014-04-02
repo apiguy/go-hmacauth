@@ -54,7 +54,8 @@ There are 3 configurable options you can use to tweak the behavior of
 
 * ### SignedHeaders: `[]string` *Optional*
 A string slice of headers that are required to be included when generating the
-"string to sign". The order is enforced.
+"string to sign". Regardless of which order you specify the headers in, they
+will be sorted before being evaluated.
 
 * ### SecretKey: `func(string) string` *Required*
 A function that will return a secret key to use for a given api key. If a value
@@ -115,7 +116,7 @@ string_to_sign = \
   REQUEST_URI + "\n"
   TIMESTAMP + "\n"
 
-for header in required_headers:
+for header in sorted(required_headers):
   string_to_sign += header.value()
   string_to_sign += "\n"
 
@@ -125,7 +126,7 @@ To elaborate, let's say you've got the following `Options`:
 
 ```go
 Options{
-	SignedHeaders:       []string{"Content-Type"},
+	SignedHeaders:       []string{"User-Agent", "Content-Type"},
 	SecretKey:           func(apiKey string) string { return "secret" },
 	SignatureExpiration: 300,
 }
@@ -142,14 +143,40 @@ User-Agent: CoolClientLib 1.0
 {"title": "Go Crazy", "text": "After this week, I'm ready to."}
 ```
 
-The client will need to construct the "string to sign", which in this case
-should look like:
+The client will need to construct the "string to sign".
+
+No matter what signed headers you require the first part of the string to sign
+is always constructed in the same way:
 
 ```
 POST
 notes.someapp.com
 /notes/?create=true
 2014-04-01T10:16:38-04:00
+
+```
+
+Next the client will need to add the header values of the headers that you
+require. They should be added by order of the name of the Header
+(not the value). In this case the required headers are `User-Agent` and
+`Content-Type`. When we sort them the `Content-Type` header comes first, so
+we add the following to our "string to sign".
+
+```
+application/json;charset=UTF-8
+CoolClientLib 1.0
+
+```
+
+And we end up with a final "string to sign" that looks like this (don't overlook
+the newline character at the end of the string):
+
+```
+POST
+notes.someapp.com
+/notes/?create=true
+2014-04-01T10:16:38-04:00
+application/json;charset=UTF-8
 CoolClientLib 1.0
 
 ```

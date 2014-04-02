@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -88,6 +89,7 @@ func signString(str string, secret string) string {
 func stringToSign(req *http.Request, options *Options, timestamp string) (string, error) {
 	var buffer bytes.Buffer
 
+	// Standard
 	buffer.WriteString(req.Method)
 	buffer.WriteString("\n")
 	buffer.WriteString(req.Host)
@@ -96,6 +98,9 @@ func stringToSign(req *http.Request, options *Options, timestamp string) (string
 	buffer.WriteString("\n")
 	buffer.WriteString(timestamp)
 	buffer.WriteString("\n")
+
+	// Headers
+	sort.Strings(options.SignedHeaders)
 	for _, header := range options.SignedHeaders {
 		val := req.Header.Get(header)
 		if val == "" {

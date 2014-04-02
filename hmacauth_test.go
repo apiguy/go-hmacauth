@@ -168,6 +168,29 @@ func Test_stringToSign_with_headers(t *testing.T) {
 	expect(t, expectedStr, str)
 }
 
+func Test_stringToSign_with_ordered_headers(t *testing.T) {
+	req, _ := http.NewRequest("GET", "http://testhost.test/some/path?key=value&more=stuff", nil)
+	req.Header.Add("A-Test", "12345678")
+	req.Header.Add("B-Test", "87654321")
+
+	timestampStr := time.Now().Format(time.RFC3339)
+	options := Options{
+		SignedHeaders: []string{"B-Test", "A-Test"},
+	}
+
+	str, err := stringToSign(req, &options, timestampStr)
+	expectedStr := "GET\n" +
+		"testhost.test\n" +
+		"/some/path?key=value&more=stuff\n" +
+		timestampStr + "\n" +
+		"12345678\n" +
+		"87654321\n"
+
+	expect(t, err, nil)
+	expect(t, expectedStr, str)
+}
+
+
 func Test_stringToSign_missing_required_header(t *testing.T) {
 	req, _ := http.NewRequest("GET", "http://testhost.test/some/path?key=value&more=stuff", nil)
 	req.Header.Add("X-Test1", "12345678")
@@ -227,6 +250,39 @@ func Test_HMACAuth_bad_api_key(t *testing.T) {
 	expect(t, w.Code, 401)
 	expect(t, "Invalid APIKey\n", w.Body.String())
 }
+
+func Test_HMACAuth_incorrect_header_order_in_string_to_sign(t *testing.T) {
+	options := Options{
+		SignedHeaders: []string{"A-Test", "B-Test"},
+		SecretKey: func(apiKey string) string {return "secret"},
+	}
+	middlewareFunc := HMACAuth(options)
+
+	timestampStr := time.Now().Format(time.RFC3339)
+	badStrToSign := "GET\n" +
+		"testhost.test\n" +
+		"/some/path?key=value&more=stuff\n" +
+		timestampStr + "\n" +
+		"12345678\n" + // Values are in reverse order here
+		"87654321\n"
+
+	sig := signString(badStrToSign, "secret")
+
+	authHeader :=
+		fmt.Sprintf("APIKey=12345678,Signature=%s,Timestamp=%s", sig, timestampStr)
+
+	req, _ := http.NewRequest("GET", "http://testhost.test/some/path?key=value&more=stuff", nil)
+	req.Header.Add("Authorization", authHeader)
+	req.Header.Add("A-Test", "87654321")
+	req.Header.Add("B-Test", "12345678")
+
+	w := httptest.NewRecorder()
+
+	middlewareFunc(w, req)
+	expect(t, w.Code, 401)
+	expect(t, "Invalid Signature\n", w.Body.String())
+}
+
 
 func Test_HMACAuth_bad_signature(t *testing.T) {
 	options := Options{
