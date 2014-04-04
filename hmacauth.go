@@ -163,16 +163,16 @@ func repeatedParameterError(paramName string) error {
 }
 
 func validateTimestamp(ts time.Time, options *Options) error {
-	reqTime := time.Since(ts)
+	reqAge := time.Since(ts)
 
 	// Allow for about `maxNegativeFloat` of difference, some servers are
 	// ahead and some are behind
-	if reqTime < maxNegativeFloat {
+	if reqAge < maxNegativeFloat {
 		return errors.New("Timestamp out of range")
 	}
 
 	if options.SignatureExpiresIn != 0 {
-		if reqTime > options.SignatureExpiresIn {
+		if reqAge > options.SignatureExpiresIn {
 			return errors.New("Signature expired")
 		}
 	}
