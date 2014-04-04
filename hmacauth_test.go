@@ -59,27 +59,20 @@ func Test_validateTimeout_past_no_timeout_set(t *testing.T) {
 
 func Test_validateTimeout_expired(t *testing.T) {
 	past := secondsAgo(300)
-	err := validateTimestamp(past, &Options{SignatureExpiration: 100})
+	err := validateTimestamp(past, &Options{SignatureExpiresIn: 100 * time.Second})
 	refute(t, err, nil)
 	expect(t, err.Error(), "Signature expired")
 }
 
 func Test_validateTimeout_past_not_expired(t *testing.T) {
 	past := secondsAgo(30)
-	err := validateTimestamp(past, &Options{SignatureExpiration: 100})
+	err := validateTimestamp(past, &Options{SignatureExpiresIn: 100 * time.Second})
 	expect(t, err, nil)
-}
-
-func Test_parseError(t *testing.T) {
-	errString := "This is an error"
-	_, err := parseError(errString)
-	refute(t, err, nil)
-	expect(t, err.Error(), errString)
 }
 
 func Test_repeatedParameter(t *testing.T) {
 	errString := "Repeated parameter: \"Boo\" in header string"
-	_, err := repeatedParameter("Boo")
+	err := repeatedParameterError("Boo")
 	refute(t, err, nil)
 	expect(t, err.Error(), errString)
 }
@@ -190,7 +183,6 @@ func Test_stringToSign_with_ordered_headers(t *testing.T) {
 	expect(t, expectedStr, str)
 }
 
-
 func Test_stringToSign_missing_required_header(t *testing.T) {
 	req, _ := http.NewRequest("GET", "http://testhost.test/some/path?key=value&more=stuff", nil)
 	req.Header.Add("X-Test1", "12345678")
@@ -254,7 +246,7 @@ func Test_HMACAuth_bad_api_key(t *testing.T) {
 func Test_HMACAuth_incorrect_header_order_in_string_to_sign(t *testing.T) {
 	options := Options{
 		SignedHeaders: []string{"A-Test", "B-Test"},
-		SecretKey: func(apiKey string) string {return "secret"},
+		SecretKey:     func(apiKey string) string { return "secret" },
 	}
 	middlewareFunc := HMACAuth(options)
 
@@ -282,7 +274,6 @@ func Test_HMACAuth_incorrect_header_order_in_string_to_sign(t *testing.T) {
 	expect(t, w.Code, 401)
 	expect(t, "Invalid Signature\n", w.Body.String())
 }
-
 
 func Test_HMACAuth_bad_signature(t *testing.T) {
 	options := Options{
