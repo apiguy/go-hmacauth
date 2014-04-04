@@ -28,7 +28,7 @@ func main() {
 	options := hmacauth.Options{
 		SignedHeaders:       []string{"Content-MD5", "Content-Type"},
 		SecretKey:           func(apiKey string) string { return "secret" },
-		SignatureExpiration: 300,
+		SignatureExpiresIn: 300 * time.Second,
 	}
 
 	m.Use(hmacauth.HMACAuth(options))
@@ -61,8 +61,8 @@ will be sorted before being evaluated.
 A function that will return a secret key to use for a given api key. If a value
 is not provided, a `panic` will be raised when starting the server.
 
-* ### SignatureExpiration: `int32` *Optional*
-An integer representing the maximum number of seconds that a signature is valid
+* ### SignatureExpiresIn: `time.Duration` *Optional*
+An duration representing the maximum length of time that a signature is valid
 for.
 
 Once you've created an instance of `Options` you can pass it to `HMACAuth` to
