@@ -5,31 +5,39 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 )
 
-type middleware func(http.ResponseWriter, *http.Request)
-type keyLocator func(string) string
+const (
+	// common parameters
+	authorizationHeader = "Authorization"
+	apiKeyParam         = "APIKey"
+	signatureParam      = "Signature"
+	timestampParam      = "Timestamp"
 
-const maxNegativeFloat time.Duration = -10 * time.Second
+	// timestamp validation
+	maxNegativeTimeOffset time.Duration = -10 * time.Second
+
+	// parsing bits
+	empty   = ""
+	comma   = ","
+	space   = " "
+	eqSign  = "="
+	newline = "\n"
+)
+
+type (
+	middleware func(http.ResponseWriter, *http.Request)
+	keyLocator func(string) string
+)
 
 type Options struct {
 	SignedHeaders      []string
 	SecretKey          keyLocator
 	SignatureExpiresIn time.Duration
-}
-
-type HMACAuthError struct {
-	Message string
-}
-
-func (e HMACAuthError) Error() string {
-	return e.Message
 }
 
 type authBits struct {
@@ -40,8 +48,8 @@ type authBits struct {
 }
 
 func (ab *authBits) IsValid() bool {
-	return ab.APIKey != "" &&
-		ab.Signature != "" &&
+	return ab.APIKey != empty &&
+		ab.Signature != empty &&
 		!ab.Timestamp.IsZero()
 }
 
@@ -56,7 +64,7 @@ func (ab *authBits) SetTimestamp(isoTime string) (err error) {
 func HMACAuth(options Options) middleware {
 	// Validate options
 	if options.SecretKey == nil {
-		panic("HMACAuth Secret Key Locator Required")
+		panic(secretKeyRequired)
 	}
 
 	return func(res http.ResponseWriter, req *http.Request) {
@@ -65,16 +73,16 @@ func HMACAuth(options Options) middleware {
 			ab  *authBits
 		)
 
-		if ab, err = parseAuthHeader(req.Header.Get("Authorization")); err == nil {
+		if ab, err = parseAuthHeader(req.Header.Get(authorizationHeader)); err == nil {
 			if err = validateTimestamp(ab.Timestamp, &options); err == nil {
 				var sts string
 				if sts, err = stringToSign(req, &options, ab.TimestampString); err == nil {
-					if sk := options.SecretKey(ab.APIKey); sk != "" {
+					if sk := options.SecretKey(ab.APIKey); sk != empty {
 						if ab.Signature != signString(sts, sk) {
-							err = HMACAuthError{"Invalid Signature"}
+							err = HMACAuthError{invalidSignature}
 						}
 					} else {
-						err = HMACAuthError{"Invalid APIKey"}
+						err = HMACAuthError{invalidAPIKey}
 					}
 				}
 			}
@@ -97,83 +105,78 @@ func stringToSign(req *http.Request, options *Options, timestamp string) (string
 
 	// Standard
 	buffer.WriteString(req.Method)
-	buffer.WriteString("\n")
+	buffer.WriteString(newline)
 	buffer.WriteString(req.Host)
-	buffer.WriteString("\n")
+	buffer.WriteString(newline)
 	buffer.WriteString(req.URL.RequestURI())
-	buffer.WriteString("\n")
+	buffer.WriteString(newline)
 	buffer.WriteString(timestamp)
-	buffer.WriteString("\n")
+	buffer.WriteString(newline)
 
 	// Headers
 	sort.Strings(options.SignedHeaders)
 	for _, header := range options.SignedHeaders {
 		val := req.Header.Get(header)
-		if val == "" {
-			return "",
-				errors.New("Invalid Request. Missing Required Header: " + header)
+		if val == empty {
+			return empty, HeaderMissingError{header}
 		}
 		buffer.WriteString(val)
-		buffer.WriteString("\n")
+		buffer.WriteString(newline)
 	}
 
 	return buffer.String(), nil
 }
 
 func parseAuthHeader(header string) (*authBits, error) {
-	if header == "" {
-		return nil, HMACAuthError{"Authorization Header Not Supplied"}
+	if header == empty {
+		return nil, HeaderMissingError{authorizationHeader}
 	}
 
 	ab := new(authBits)
-	parts := strings.Split(header, ",")
+	parts := strings.Split(header, comma)
 	for _, part := range parts {
-		kv := strings.SplitN(strings.Trim(part, " "), "=", 2)
-		if kv[0] == "APIKey" {
-			if ab.APIKey != "" {
-				return nil, repeatedParameterError(kv[0])
+		kv := strings.SplitN(strings.Trim(part, space), eqSign, 2)
+		if kv[0] == apiKeyParam {
+			if ab.APIKey != empty {
+				return nil, RepeatedParameterError{kv[0]}
 			}
 			ab.APIKey = kv[1]
-		} else if kv[0] == "Signature" {
-			if ab.Signature != "" {
-				return nil, repeatedParameterError(kv[0])
+		} else if kv[0] == signatureParam {
+			if ab.Signature != empty {
+				return nil, RepeatedParameterError{kv[0]}
 			}
 			ab.Signature = kv[1]
-		} else if kv[0] == "Timestamp" {
+		} else if kv[0] == timestampParam {
 			if !ab.Timestamp.IsZero() {
-				return nil, repeatedParameterError(kv[0])
+				return nil, RepeatedParameterError{kv[0]}
 			}
 			if ab.SetTimestamp(kv[1]) != nil {
-				return nil, HMACAuthError{"Invalid timestamp. Requires RFC3339 format."}
+				return nil, HMACAuthError{invalidTimestamp}
 			}
 		} else {
-			return nil, HMACAuthError{"Invalid parameter in header string"}
+			return nil, HMACAuthError{invalidParameter}
 		}
 	}
 
 	if !ab.IsValid() {
-		return nil, HMACAuthError{"Missing parameter in header string"}
+		return nil, HMACAuthError{missingParameter}
 	}
 
 	return ab, nil
 }
 
-func repeatedParameterError(paramName string) error {
-	return HMACAuthError{fmt.Sprintf("Repeated parameter: %q in header string", paramName)}
-}
-
 func validateTimestamp(ts time.Time, options *Options) error {
 	reqAge := time.Since(ts)
 
-	// Allow for about `maxNegativeFloat` of difference, some servers are
+	// Allow for about `maxNegativeTimeOffset` of difference, some servers are
 	// ahead and some are behind
-	if reqAge < maxNegativeFloat {
-		return errors.New("Timestamp out of range")
+	if reqAge < maxNegativeTimeOffset {
+		return HMACAuthError{tsOutOfRange}
 	}
 
 	if options.SignatureExpiresIn != 0 {
 		if reqAge > options.SignatureExpiresIn {
-			return errors.New("Signature expired")
+			return HMACAuthError{signatureExpired}
 		}
 	}
 

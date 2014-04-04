@@ -72,7 +72,7 @@ func Test_validateTimeout_past_not_expired(t *testing.T) {
 
 func Test_repeatedParameter(t *testing.T) {
 	errString := "Repeated parameter: \"Boo\" in header string"
-	err := repeatedParameterError("Boo")
+	err := RepeatedParameterError{"Boo"}
 	refute(t, err, nil)
 	expect(t, err.Error(), errString)
 }
@@ -219,7 +219,7 @@ func Test_HMACAuth_no_auth_header(t *testing.T) {
 
 	middlewareFunc(w, req)
 	expect(t, w.Code, 401)
-	expect(t, "Authorization Header Not Supplied\n", w.Body.String())
+	expect(t, "Missing required header: \"Authorization\"\n", w.Body.String())
 }
 
 func Test_HMACAuth_bad_api_key(t *testing.T) {
