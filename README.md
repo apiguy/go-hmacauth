@@ -27,7 +27,7 @@ func main() {
 
 	options := hmacauth.Options{
 		SignedHeaders:       []string{"Content-MD5", "Content-Type"},
-		SecretKey:           func(apiKey string) string { return "secret" },
+		SecretKey:           hmacauth.KeyLocator(func(apiKey string) string { return "secret" }),
 		SignatureExpiresIn: 300 * time.Second,
 	}
 
@@ -127,7 +127,7 @@ To elaborate, let's say you've got the following `Options`:
 ```go
 Options{
 	SignedHeaders:       []string{"User-Agent", "Content-Type"},
-	SecretKey:           func(apiKey string) string { return "secret" },
+	SecretKey:           KeyLocator(func(apiKey string) string { return "secret" }),
 	SignatureExpiration: 300,
 }
 ```
@@ -191,7 +191,7 @@ base64 encoded.
 ~~~ python
 # Python
 
-raw_sig = hmac.new("secret", string_to_sign, hashlib.sha256)
+raw_sig = hmac.new("secret", string_to_sign, hashlib.sha256).digest()
 encoded_sig = b64encode(raw_sig)
 
 ~~~

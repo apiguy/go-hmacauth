@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"log"
 )
 
 const (
@@ -31,12 +32,12 @@ const (
 
 type (
 	middleware func(http.ResponseWriter, *http.Request)
-	keyLocator func(string) string
+	KeyLocator func(string) string
 )
 
 type Options struct {
 	SignedHeaders      []string
-	SecretKey          keyLocator
+	SecretKey          KeyLocator
 	SignatureExpiresIn time.Duration
 }
 
@@ -89,6 +90,7 @@ func HMACAuth(options Options) middleware {
 		}
 
 		if err != nil {
+			log.Println(err.Error())
 			http.Error(res, err.Error(), 401)
 		}
 	}
@@ -123,6 +125,8 @@ func stringToSign(req *http.Request, options *Options, timestamp string) (string
 		buffer.WriteString(val)
 		buffer.WriteString(newline)
 	}
+
+	log.Println(buffer.String())
 
 	return buffer.String(), nil
 }
