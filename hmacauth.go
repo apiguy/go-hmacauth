@@ -126,8 +126,6 @@ func stringToSign(req *http.Request, options *Options, timestamp string) (string
 		buffer.WriteString(newline)
 	}
 
-	log.Println(buffer.String())
-
 	return buffer.String(), nil
 }
 
