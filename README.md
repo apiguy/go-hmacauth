@@ -1,4 +1,4 @@
-Go HMACAuth
+Go HMACAuth [![wercker status](https://app.wercker.com/status/0966b59b3fdcf453e6d7099fc052fb13/s/ "wercker status")](https://app.wercker.com/project/bykey/0966b59b3fdcf453e6d7099fc052fb13)
 ===========
 
 HMAC Auth for your Go web applications
